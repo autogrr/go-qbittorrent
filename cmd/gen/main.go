@@ -34,6 +34,9 @@ type fieldDesc struct {
 	Zero        string // zero literal for skip-if-zero fields: `""` or `0`
 	IsPointer   bool   // *T field — needs deep-copy
 	PointeeType string // T in *T
+	JSONTag     string // json tag name, e.g. "added_on"
+	Underlying  string // resolved underlying type, e.g. "string", "int64"
+	IsBool      bool   // underlying type is bool
 }
 
 // ---- AST helpers ------------------------------------------------------------
@@ -60,25 +63,29 @@ func classifyField(name string, expr ast.Expr, aliases map[string]string) fieldD
 	case *ast.StarExpr:
 		// *T — always overwrite; pointee must be deep-copied by callers.
 		pt := ""
+		var under string
+		var isBool bool
 		if id, ok := t.X.(*ast.Ident); ok {
 			pt = id.Name
+			under = resolveUnderlying(id.Name, aliases)
+			isBool = under == "bool"
 		}
-		return fieldDesc{Name: name, AlwaysWrite: true, IsPointer: true, PointeeType: pt}
+		return fieldDesc{Name: name, AlwaysWrite: true, IsPointer: true, PointeeType: pt, Underlying: under, IsBool: isBool}
 
 	case *ast.Ident:
 		under := resolveUnderlying(t.Name, aliases)
 		switch under {
 		case "bool":
-			return fieldDesc{Name: name, AlwaysWrite: true}
+			return fieldDesc{Name: name, AlwaysWrite: true, Underlying: under, IsBool: true}
 		case "string":
-			return fieldDesc{Name: name, Zero: `""`}
+			return fieldDesc{Name: name, Zero: `""`, Underlying: under}
 		case "int", "int8", "int16", "int32", "int64",
 			"uint", "uint8", "uint16", "uint32", "uint64",
 			"float32", "float64":
-			return fieldDesc{Name: name, Zero: "0"}
+			return fieldDesc{Name: name, Zero: "0", Underlying: under}
 		default:
 			// Opaque/unknown type; always overwrite to be safe.
-			return fieldDesc{Name: name, AlwaysWrite: true}
+			return fieldDesc{Name: name, AlwaysWrite: true, Underlying: under}
 		}
 
 	default:
@@ -132,14 +139,37 @@ func parseStructs(path string) (map[string][]fieldDesc, error) {
 			}
 			var fields []fieldDesc
 			for _, ff := range st.Fields.List {
+				jsonTag := extractJSONTag(ff.Tag)
 				for _, nm := range ff.Names {
-					fields = append(fields, classifyField(nm.Name, ff.Type, aliases))
+					fd := classifyField(nm.Name, ff.Type, aliases)
+					fd.JSONTag = jsonTag
+					fields = append(fields, fd)
 				}
 			}
 			out[ts.Name.Name] = fields
 		}
 	}
 	return out, nil
+}
+
+// extractJSONTag returns the JSON field name from a struct tag literal.
+// Returns "" when the tag is absent, "-", or empty.
+func extractJSONTag(tag *ast.BasicLit) string {
+	if tag == nil {
+		return ""
+	}
+	// tag.Value includes backticks: `json:"foo,omitempty"`
+	raw := tag.Value
+	const key = `json:"`
+	idx := strings.Index(raw, key)
+	if idx < 0 {
+		return ""
+	}
+	rest := raw[idx+len(key):]
+	if end := strings.IndexAny(rest, `",`); end > 0 {
+		return rest[:end]
+	}
+	return ""
 }
 
 // ---- templates --------------------------------------------------------------
@@ -204,15 +234,129 @@ func deepCopy{{ .Name }}(t *{{ .Name }}) *{{ .Name }} {
 
 // ---- codegen ----------------------------------------------------------------
 
+// sortTarget is the struct for which sort comparison code is generated.
+const sortTarget = "Torrent"
+
 type structData struct {
 	Name   string
 	Fields []fieldDesc
 }
 
+// sortFieldDesc holds the data needed to generate a single sort comparison function.
+type sortFieldDesc struct {
+	Name       string // Go field name, e.g. "AddedOn"
+	JSONTag    string // JSON tag name, e.g. "added_on"
+	IsPointer  bool
+	IsBool     bool
+	Underlying string // e.g. "int64", "string", "float64", "bool"
+}
+
+var sortTmpl = template.Must(template.New("sort").Parse(`
+import "sort"
+
+// TorrentSort defines sort criteria for a torrent slice.
+type TorrentSort struct {
+	// Field is the torrent field to sort by. Use the JSON field names
+	// that the qBittorrent API accepts (e.g. "name", "added_on", "size").
+	// An empty or unrecognised field falls back to sorting by "hash".
+	Field string
+
+	// Reverse sorts in descending order when true.
+	Reverse bool
+}
+
+// SortTorrents sorts a torrent slice in-place by the given criteria.
+// An empty or unrecognised Field falls back to sorting by hash.
+func SortTorrents(torrents []Torrent, opts TorrentSort) {
+	s := &torrentSorter{data: torrents, cmp: torrentCmpFunc(opts.Field), less: lessAsc}
+	if opts.Reverse {
+		s.less = lessDesc
+	}
+	sort.Sort(s)
+}
+
+// torrentSorter implements sort.Interface. Pointer receiver avoids copying
+// the struct on every Len/Less/Swap call through the interface.
+type torrentSorter struct {
+	data []Torrent
+	cmp  func(a, b *Torrent) int
+	less func(s *torrentSorter, i, j int) bool
+}
+
+func (s *torrentSorter) Len() int      { return len(s.data) }
+func (s *torrentSorter) Swap(i, j int) { s.data[i], s.data[j] = s.data[j], s.data[i] }
+func (s *torrentSorter) Less(i, j int) bool { return s.less(s, i, j) }
+func lessAsc(s *torrentSorter, i, j int) bool  { return s.cmp(&s.data[i], &s.data[j]) < 0 }
+func lessDesc(s *torrentSorter, i, j int) bool { return s.cmp(&s.data[i], &s.data[j]) > 0 }
+
+// torrentCmpFunc returns a comparison function for the given sort field.
+// Lookup is O(1) via map. Falls back to hash comparison for unrecognised fields.
+func torrentCmpFunc(field string) func(a, b *Torrent) int {
+	if fn, ok := torrentSortFields[field]; ok {
+		return fn
+	}
+	return cmpTorrentHash
+}
+
+// cmpPtr compares two pointer values using native operators. nil sorts first.
+// Single nil guard covers the rare case; hot path (both non-nil) is one branch.
+// Equality is checked first because for strings == short-circuits on length
+// mismatch (O(1)) before falling through to a single < for direction.
+func cmpPtr[T interface{ ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string }](a, b *T) int {
+	if a == nil || b == nil {
+		if a == b { return 0 }
+		if a == nil { return -1 }
+		return 1
+	}
+	if *a == *b { return 0 }
+	if *a < *b { return -1 }
+	return 1
+}
+
+// cmpPtrBool compares two *bool values. nil < false < true.
+// Single nil guard covers the rare case; hot path (both non-nil) is one branch.
+func cmpPtrBool(a, b *bool) int {
+	if a == nil || b == nil {
+		if a == b { return 0 }
+		if a == nil { return -1 }
+		return 1
+	}
+	if *a == *b { return 0 }
+	if !*a { return -1 }
+	return 1
+}
+
+// torrentSortFields maps JSON field names to named comparison functions.
+// Generated by cmd/gen — edit types.go then re-run go generate.
+var torrentSortFields = map[string]func(a, b *Torrent) int{
+{{- range .Fields }}
+	"{{ .JSONTag }}": cmpTorrent{{ .Name }},
+{{- end }}
+}
+{{ range .Fields }}
+func cmpTorrent{{ .Name }}(a, b *Torrent) int {
+{{- if .IsBool }}
+	return cmpPtrBool(a.{{ .Name }}, b.{{ .Name }})
+{{- else }}
+	return cmpPtr(a.{{ .Name }}, b.{{ .Name }})
+{{- end }}
+}
+{{ end }}
+`))
+
 func render(tmpl *template.Template, structs []structData) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteString(fileHeader)
 	if err := tmpl.Execute(&buf, map[string]any{"Structs": structs}); err != nil {
+		return nil, err
+	}
+	return format.Source(buf.Bytes())
+}
+
+func renderSort(fields []sortFieldDesc) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteString(fileHeader)
+	if err := sortTmpl.Execute(&buf, map[string]any{"Fields": fields}); err != nil {
 		return nil, err
 	}
 	return format.Source(buf.Bytes())
@@ -263,6 +407,34 @@ func main() {
 		log.Fatalf("render deepcopy: %v", err)
 	}
 	writeFile("deepcopy_gen.go", dcOut)
+
+	// ── sort_gen.go ──────────────────────────────────────────────────────────
+	// Generate comparison functions for every sortable Torrent field.
+	torrentFields, ok := structs[sortTarget]
+	if !ok {
+		log.Fatalf("struct %q not found in types.go", sortTarget)
+	}
+	var sortFields []sortFieldDesc
+	for _, f := range torrentFields {
+		if f.JSONTag == "" || f.JSONTag == "-" {
+			continue // skip untagged or excluded fields
+		}
+		if !f.IsPointer {
+			continue // only pointer fields are sortable (slices, maps, etc. are not)
+		}
+		sortFields = append(sortFields, sortFieldDesc{
+			Name:       f.Name,
+			JSONTag:    f.JSONTag,
+			IsPointer:  f.IsPointer,
+			IsBool:     f.IsBool,
+			Underlying: f.Underlying,
+		})
+	}
+	sortOut, err := renderSort(sortFields)
+	if err != nil {
+		log.Fatalf("render sort: %v", err)
+	}
+	writeFile("sort_gen.go", sortOut)
 }
 
 func hasPointers(fields []fieldDesc) bool {

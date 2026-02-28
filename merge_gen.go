@@ -222,6 +222,10 @@ func mergePartialTorrent(dst, src *Torrent) {
 	if src.Private != nil {
 		dst.Private = src.Private
 	}
+
+	dst.Files = src.Files
+
+	dst.Trackers = src.Trackers
 }
 
 // mergePartialServerState copies fields from src into dst using presence-aware

@@ -4,7 +4,6 @@ package qbittorrent
 
 import (
 	"context"
-	"sort"
 	"sync"
 	"time"
 
@@ -89,17 +88,28 @@ func (s *SyncState) GetTorrents() map[string]Torrent {
 	return out
 }
 
-// GetTorrentSlice returns all torrents as a slice sorted by hash.
-// The order is deterministic across calls regardless of map iteration order.
+// GetTorrentSlice returns all torrents as a sorted slice.
+// Without arguments the slice is sorted by hash for deterministic output.
+// Pass a TorrentSort to control the sort field and direction:
+//
+//	state.GetTorrentSlice()                                          // sorted by hash (default)
+//	state.GetTorrentSlice(TorrentSort{Field: "name"})                // sorted by name ascending
+//	state.GetTorrentSlice(TorrentSort{Field: "added_on", Reverse: true}) // newest first
+//
 // Pointer fields within each Torrent are independently copied.
-func (s *SyncState) GetTorrentSlice() []Torrent {
+func (s *SyncState) GetTorrentSlice(sortOpts ...TorrentSort) []Torrent {
 	s.mu.RLock()
 	out := make([]Torrent, 0, len(s.Torrents))
 	for _, t := range s.Torrents {
 		out = append(out, *deepCopyTorrent(&t))
 	}
 	s.mu.RUnlock()
-	sort.Slice(out, func(i, j int) bool { return Deref(out[i].Hash) < Deref(out[j].Hash) })
+
+	if len(sortOpts) > 0 {
+		SortTorrents(out, sortOpts[0])
+	} else {
+		SortTorrents(out, TorrentSort{Field: "hash"})
+	}
 	return out
 }
 

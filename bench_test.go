@@ -297,6 +297,51 @@ func BenchmarkMergePartialTorrent(b *testing.B) {
 }
 
 // -----------------------------------------------------------------------
+// Sort
+// -----------------------------------------------------------------------
+
+func BenchmarkSortTorrents_ByName_10k(b *testing.B) {
+	s := populatedState(10_000)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sl := s.GetTorrentSlice(TorrentSort{Field: "name"})
+		_ = sl
+	}
+}
+
+func BenchmarkSortTorrents_BySize_200k(b *testing.B) {
+	s := populatedState(200_000)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sl := s.GetTorrentSlice(TorrentSort{Field: "size"})
+		_ = sl
+	}
+}
+
+func BenchmarkSortTorrents_ByAddedOn_Reverse_200k(b *testing.B) {
+	s := populatedState(200_000)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sl := s.GetTorrentSlice(TorrentSort{Field: "added_on", Reverse: true})
+		_ = sl
+	}
+}
+
+func BenchmarkSortTorrents_InPlace_200k(b *testing.B) {
+	base := populatedState(200_000).GetTorrentSlice()
+	sl := make([]Torrent, len(base))
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		copy(sl, base)
+		SortTorrents(sl, TorrentSort{Field: "name"})
+	}
+}
+
+// -----------------------------------------------------------------------
 // JSON decode — sonic unmarshal vs streaming vs stdlib
 // -----------------------------------------------------------------------
 
