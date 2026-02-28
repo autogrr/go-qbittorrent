@@ -627,6 +627,10 @@ func joinSep(ss []string, sep byte) string {
 	b.Grow(n)
 	b.WriteString(ss[0])
 	for _, s := range ss[1:] {
+		if len(s) == 0 {
+			continue
+		}
+
 		b.WriteByte(sep)
 		b.WriteString(s)
 	}
