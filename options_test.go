@@ -21,6 +21,7 @@ func TestTorrentFilterOptions_Empty(t *testing.T) {
 }
 
 func TestTorrentFilterOptions_Full(t *testing.T) {
+	priv := true
 	opts := TorrentFilterOptions{
 		Filter:          FilterDownloading,
 		Category:        "linux",
@@ -31,6 +32,8 @@ func TestTorrentFilterOptions_Full(t *testing.T) {
 		Offset:          10,
 		Hashes:          []string{"abc123", "def456"},
 		IncludeTrackers: true,
+		IncludeFiles:    true,
+		IsPrivate:       &priv,
 	}
 	v := opts.Encode()
 	assert.Equal(t, "downloading", v.Get("filter"))
@@ -42,6 +45,25 @@ func TestTorrentFilterOptions_Full(t *testing.T) {
 	assert.Equal(t, "10", v.Get("offset"))
 	assert.Equal(t, "abc123|def456", v.Get("hashes"))
 	assert.Equal(t, "true", v.Get("includeTrackers"))
+	assert.Equal(t, "true", v.Get("includeFiles"))
+	assert.Equal(t, "true", v.Get("private"))
+}
+
+func TestTorrentFilterOptions_IsPrivateFalse(t *testing.T) {
+	priv := false
+	v := TorrentFilterOptions{IsPrivate: &priv}.Encode()
+	assert.Equal(t, "false", v.Get("private"))
+}
+
+func TestTorrentFilterOptions_IsPrivateNilOmitted(t *testing.T) {
+	v := TorrentFilterOptions{}.Encode()
+	assert.Empty(t, v.Get("private"))
+}
+
+func TestTorrentFilterOptions_IncludeFilesOnly(t *testing.T) {
+	v := TorrentFilterOptions{IncludeFiles: true}.Encode()
+	assert.Equal(t, "true", v.Get("includeFiles"))
+	assert.Empty(t, v.Get("includeTrackers"))
 }
 
 func TestTorrentFilterOptions_NegativeLimitIgnored(t *testing.T) {

@@ -15,7 +15,14 @@ type TorrentFilterOptions struct {
 	Limit           int
 	Offset          int
 	Hashes          []string
+	// IncludeTrackers embeds the full tracker list in each Torrent in the response.
+	// Requires qBittorrent >= 5.1. When true, Torrent.Trackers is populated.
 	IncludeTrackers bool
+	// IncludeFiles embeds the file list in each Torrent in the response.
+	// Requires qBittorrent >= 5.2. When true, Torrent.Files is populated.
+	IncludeFiles bool
+	// IsPrivate filters by private-tracker status. nil means no filter.
+	IsPrivate *bool
 }
 
 // Encode returns the options as url.Values for GET requests.
@@ -47,6 +54,12 @@ func (o TorrentFilterOptions) Encode() url.Values {
 	}
 	if o.IncludeTrackers {
 		v.Set("includeTrackers", "true")
+	}
+	if o.IncludeFiles {
+		v.Set("includeFiles", "true")
+	}
+	if o.IsPrivate != nil {
+		v.Set("private", boolStr(*o.IsPrivate))
 	}
 	return v
 }

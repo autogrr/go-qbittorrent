@@ -163,6 +163,10 @@ type Torrent struct {
 	Reannounce               *int64        `json:"reannounce"`
 	PopularityScore          *float64      `json:"popularity"`
 	Private                  *bool         `json:"private"`
+	// Files is populated when TorrentFilterOptions.IncludeFiles is true (qBittorrent >= 5.2).
+	Files []TorrentFile `json:"files,omitempty"`
+	// Trackers is populated when TorrentFilterOptions.IncludeTrackers is true (qBittorrent >= 5.1).
+	Trackers []TorrentTracker `json:"trackers,omitempty"`
 }
 
 // TorrentProperties contains detailed properties for a single torrent.
@@ -220,16 +224,40 @@ type TorrentFile struct {
 	Size         *int64        `json:"size"`
 }
 
-// TorrentTracker represents a single tracker for a torrent.
-type TorrentTracker struct {
+// TrackerEndpoint holds per-endpoint statistics for a tracker tier.
+// Each tracker URL may be served by multiple endpoints (e.g. UDP/TCP).
+type TrackerEndpoint struct {
+	Name          *string        `json:"name"`
+	Updating      *bool          `json:"updating"`
+	Status        *TrackerStatus `json:"status"`
 	Message       *string        `json:"msg"`
-	NumDownloaded *int           `json:"num_downloaded"`
-	NumLeeches    *int           `json:"num_leeches"`
+	BTVersion     *int           `json:"bt_version"`
 	NumPeers      *int           `json:"num_peers"`
 	NumSeeds      *int           `json:"num_seeds"`
-	Status        *TrackerStatus `json:"status"`
-	Tier          *int           `json:"tier"`
-	URL           *string        `json:"url"`
+	NumLeeches    *int           `json:"num_leeches"`
+	NumDownloaded *int           `json:"num_downloaded"`
+	NextAnnounce  *int64         `json:"next_announce"`
+	MinAnnounce   *int64         `json:"min_announce"`
+}
+
+// TorrentTracker represents a single tracker for a torrent.
+type TorrentTracker struct {
+	URL           *string           `json:"url"`
+	Tier          *int              `json:"tier"`
+	Updating      *bool             `json:"updating"`
+	Status        *TrackerStatus    `json:"status"`
+	Message       *string           `json:"msg"`
+	NumPeers      *int              `json:"num_peers"`
+	NumSeeds      *int              `json:"num_seeds"`
+	NumLeeches    *int              `json:"num_leeches"`
+	NumDownloaded *int              `json:"num_downloaded"`
+	// NextAnnounce is seconds since epoch of the next announce time.
+	NextAnnounce  *int64            `json:"next_announce"`
+	// MinAnnounce is seconds since epoch of the minimum announce time.
+	MinAnnounce   *int64            `json:"min_announce"`
+	// Endpoints holds per-endpoint details; only present on the /torrents/trackers
+	// and /torrents/info (with includeTrackers=true) endpoints.
+	Endpoints     []TrackerEndpoint `json:"endpoints,omitempty"`
 }
 
 // WebSeed represents a web seed URL.
