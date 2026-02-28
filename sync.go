@@ -246,6 +246,7 @@ type SyncManager struct {
 	state  *SyncState
 	sfg    singleflight.Group
 
+	startOnce  sync.Once // ensures Start() is a no-op if called more than once
 	cancelOnce sync.Once
 	cancel     context.CancelFunc
 	done       chan struct{}
@@ -296,11 +297,14 @@ func (m *SyncManager) doSync(ctx context.Context) error {
 	return nil
 }
 
-// Start begins background polling. Cancel the returned context or call Stop to halt.
+// Start begins background polling. Cancel the supplied context or call Stop to halt.
+// Start is idempotent: subsequent calls are no-ops and the second context is ignored.
 func (m *SyncManager) Start(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	m.cancelOnce.Do(func() { m.cancel = cancel })
-	go m.loop(ctx)
+	m.startOnce.Do(func() {
+		ctx, cancel := context.WithCancel(ctx)
+		m.cancelOnce.Do(func() { m.cancel = cancel })
+		go m.loop(ctx)
+	})
 }
 
 // Stop halts background polling and blocks until the loop exits.

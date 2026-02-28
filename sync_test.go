@@ -253,6 +253,37 @@ func TestSyncManager_StartStop(t *testing.T) {
 	assert.GreaterOrEqual(t, atomic.LoadInt32(&updateCount), int32(1), "OnUpdate should have been called")
 }
 
+func TestSyncManager_StartTwice(t *testing.T) {
+	// Calling Start() more than once must be a no-op: only one poller goroutine
+	// may run, and Stop() must not panic (no double-close of the done channel).
+	fs := newFakeServer(t)
+	var callCount int32
+	fs.handle("GET", "/api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&callCount, 1)
+		writeJSON(w, MainData{Rid: int(n), FullUpdate: n == 1})
+	})
+
+	c := fs.loggedInClient(t)
+	mgr := c.NewSyncManager(SyncOptions{Interval: 10 * time.Millisecond})
+
+	ctx := testCtx(t)
+	mgr.Start(ctx)
+	mgr.Start(ctx) // must be a no-op
+	mgr.Start(ctx) // must be a no-op
+
+	time.Sleep(80 * time.Millisecond)
+
+	// Stop must not panic (done channel must be closed exactly once).
+	assert.NotPanics(t, mgr.Stop)
+
+	// With three goroutines the call rate would be ~3×; one goroutine at
+	// 10 ms interval over 80 ms gives ≈8 calls. Allow a generous ceiling
+	// to avoid flakiness but catch a gross "3 pollers" regression.
+	n := atomic.LoadInt32(&callCount)
+	assert.GreaterOrEqual(t, n, int32(1), "should have polled at least once")
+	assert.LessOrEqual(t, n, int32(30), "call count suggests more than one poller goroutine")
+}
+
 func TestSyncManager_OnError(t *testing.T) {
 	fs := newFakeServer(t)
 	fs.handle("GET", "/api/v2/sync/maindata", func(w http.ResponseWriter, _ *http.Request) {

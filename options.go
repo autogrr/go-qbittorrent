@@ -7,14 +7,14 @@ import (
 
 // TorrentFilterOptions controls the torrents/info query.
 type TorrentFilterOptions struct {
-	Filter          TorrentFilter
-	Category        string
-	Tag             string
-	Sort            string
-	Reverse         bool
-	Limit           int
-	Offset          int
-	Hashes          []string
+	Filter   TorrentFilter
+	Category string
+	Tag      string
+	Sort     string
+	Reverse  bool
+	Limit    int
+	Offset   int
+	Hashes   []string
 	// IncludeTrackers embeds the full tracker list in each Torrent in the response.
 	// Requires qBittorrent >= 5.1. When true, Torrent.Trackers is populated.
 	IncludeTrackers bool

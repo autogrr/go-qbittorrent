@@ -242,22 +242,22 @@ type TrackerEndpoint struct {
 
 // TorrentTracker represents a single tracker for a torrent.
 type TorrentTracker struct {
-	URL           *string           `json:"url"`
-	Tier          *int              `json:"tier"`
-	Updating      *bool             `json:"updating"`
-	Status        *TrackerStatus    `json:"status"`
-	Message       *string           `json:"msg"`
-	NumPeers      *int              `json:"num_peers"`
-	NumSeeds      *int              `json:"num_seeds"`
-	NumLeeches    *int              `json:"num_leeches"`
-	NumDownloaded *int              `json:"num_downloaded"`
+	URL           *string        `json:"url"`
+	Tier          *int           `json:"tier"`
+	Updating      *bool          `json:"updating"`
+	Status        *TrackerStatus `json:"status"`
+	Message       *string        `json:"msg"`
+	NumPeers      *int           `json:"num_peers"`
+	NumSeeds      *int           `json:"num_seeds"`
+	NumLeeches    *int           `json:"num_leeches"`
+	NumDownloaded *int           `json:"num_downloaded"`
 	// NextAnnounce is seconds since epoch of the next announce time.
-	NextAnnounce  *int64            `json:"next_announce"`
+	NextAnnounce *int64 `json:"next_announce"`
 	// MinAnnounce is seconds since epoch of the minimum announce time.
-	MinAnnounce   *int64            `json:"min_announce"`
+	MinAnnounce *int64 `json:"min_announce"`
 	// Endpoints holds per-endpoint details; only present on the /torrents/trackers
 	// and /torrents/info (with includeTrackers=true) endpoints.
-	Endpoints     []TrackerEndpoint `json:"endpoints,omitempty"`
+	Endpoints []TrackerEndpoint `json:"endpoints,omitempty"`
 }
 
 // WebSeed represents a web seed URL.
