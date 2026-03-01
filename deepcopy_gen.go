@@ -33,7 +33,7 @@ func deepCopyTorrent(t *Torrent) *Torrent {
 	}
 
 	if c.Category != nil {
-		v := *c.Category
+		v := internStr(*c.Category)
 		c.Category = &v
 	}
 
@@ -48,7 +48,7 @@ func deepCopyTorrent(t *Torrent) *Torrent {
 	}
 
 	if c.ContentPath != nil {
-		v := *c.ContentPath
+		v := internStr(*c.ContentPath)
 		c.ContentPath = &v
 	}
 
@@ -123,7 +123,7 @@ func deepCopyTorrent(t *Torrent) *Torrent {
 	}
 
 	if c.Name != nil {
-		v := *c.Name
+		v := internStr(*c.Name)
 		c.Name = &v
 	}
 
@@ -168,12 +168,12 @@ func deepCopyTorrent(t *Torrent) *Torrent {
 	}
 
 	if c.SavePath != nil {
-		v := *c.SavePath
+		v := internStr(*c.SavePath)
 		c.SavePath = &v
 	}
 
 	if c.DownloadPath != nil {
-		v := *c.DownloadPath
+		v := internStr(*c.DownloadPath)
 		c.DownloadPath = &v
 	}
 
@@ -203,7 +203,7 @@ func deepCopyTorrent(t *Torrent) *Torrent {
 	}
 
 	if c.State != nil {
-		v := *c.State
+		v := TorrentState(internStr(string(*c.State)))
 		c.State = &v
 	}
 
@@ -213,7 +213,7 @@ func deepCopyTorrent(t *Torrent) *Torrent {
 	}
 
 	if c.Tags != nil {
-		v := *c.Tags
+		v := internStr(*c.Tags)
 		c.Tags = &v
 	}
 
@@ -228,7 +228,7 @@ func deepCopyTorrent(t *Torrent) *Torrent {
 	}
 
 	if c.Tracker != nil {
-		v := *c.Tracker
+		v := internStr(*c.Tracker)
 		c.Tracker = &v
 	}
 
@@ -795,7 +795,7 @@ func deepCopyServerState(t *ServerState) *ServerState {
 	}
 
 	if c.ConnectionStatus != nil {
-		v := *c.ConnectionStatus
+		v := internStr(*c.ConnectionStatus)
 		c.ConnectionStatus = &v
 	}
 

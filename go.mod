@@ -1,6 +1,6 @@
 module github.com/autogrr/go-qbittorrent
 
-go 1.22
+go 1.23
 
 require (
 	github.com/bytedance/sonic v1.15.0
